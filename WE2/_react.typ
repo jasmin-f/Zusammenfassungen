@@ -1,0 +1,439 @@
+#import "../template--additional-formatting-templates.typ": *
+
+/* zum testen:
+#import "../template_cheatsheet.typ": *
+#import "@preview/wrap-it:0.1.1": wrap-content
+
+#show: project.with(
+    authors: ("Jasmin Fässler",),
+    fach: "WE2",
+    fach-long: "Web Engineering 2",
+    semester: "FS26",
+    language: "de",
+    column-count: 5,
+    font-size: 4pt,
+    landscape: true,
+)
+// */
+
+
+#import "@preview/cheq:0.3.1": checklist
+#show: checklist
+
+#import "/WE2/helpers.typ": *
+
+= JavaScript
+#v(.2em)
+
+/ Function Declaration:
+     // Schlüsselwort `function`,
+    gehoistet #hinweis[Verwendung vor Definition möglich], ```js function greet() {..}```
+/ Function Expression: in JSX und überall wo eine Expression reinpasst nutzbar //()
+/ Named Function Expr.: ```js const greet = function greetPerson() {...};```, nützlich um useEffects zu benennen ```js useEffect( function useEffectNamedFunction(){ ... }, []);  ```
+/ Anonymous Function Expr.: ```js const greet = function () {...}; ```
+
+/ Arrow Function (Lambda): kompakte Form einer Function Expression, 1 Parameter: ```js ... = x => x * x; ```, mit Rückgabewert: ```js = () => "Hello";``` // ohne Rückgabewert=side effects und deshalb nicht gut: ```js = () => { .. } ```
+/ Callback Function: A JavaScript callback is a function passed as an argument to another function, which is then executed (or "called back") at a later point in time to complete a specific task. //(relevant in Express Middleware)
+
+/ Was sind Expressions?: Expressions sind Werte oder Kombinationen von Werten, Variablen und Operatoren, die ein Resultat ergeben. Alles was etwas zurück gibt.
+/ Expressions: Wie man Werte im JSX ausgeben kann u.v.m.
+/ keine Expressions: `const a = [1,2]`, statements wie `if` sind keine Expression
+/ Spread Syntax: `...` kopiert Array und Objekt Inhalte. Nur 1 Level tief.
+
+
+
+= React
+== React Regeln (Komponente, HTML, JSX)
+- [ ] Nur ein Rückgabewert: 1 parent element (Root Element) oder React.Fragment `<></>`
+- [ ] Naming der Komponente
+    - UpperCamelCase
+    - treffende Beschreibung der Komponente
+        - Beispiele: LinkButton , InfoTooltip , DraftEditor
+- [ ] HTML Attribute in JSX mit camelCase (ausser `aria-*` und `data-*`)
+    - #strike[class] -> `className`, #strike[for] in Formularfeldern -> `htmlFor`, #strike[stroke-width] -> `strokeWidth`
+- [ ] HTML Elemente geschlossen, z.B. `<img />` ,`<input />`
+- [ ] Syntax wie in JS: Wert in `{title}`
+- [ ] Keys bei Wiederholungen, z.B. `map()`
+
+==== React Code lesen und Lernziele Inhalt
+/ wieso React?: SPA, interaktiv, JSX (intuitiver als JS für HTML)
+/ Imperatives UI: beschreiben wie es geändert wird, *Deklaratives UI*: beschreiben wie es Aussehen soll
+/ Pure Components: bei gleichen Props und gleichem State immer gleiche Resultate. React geht davon aus, dass Komponenten Pure sind.
+
+/ Inline Style: ```js <div style={{ backgroundColor: "red" }}>Text</div>```
+
+/ JSX: ist die Syntax, die wir für React Komponenten verwenden. Dabei wird JS und HTML miteinander verflochten. Syntax für React Komponente. Wird übersetzt in JS, JavaScript XML
+
+==== Rendering
+/ Rendering: wenn sich state, props oder context von Komponente ändern.
+/ sicheres State Update: weil in Eventhandler und Funktion wartet React bis ausgeführt worden, bevor State Updates verarbeitet werden. ```js setCount(prev => prev + 1); ```
+
+#v(-0.5em)
+React rendering Fehler:
+#v(-0.5em)
+```tsx
+<p>{obj}</p> {/* Error "Objects are not valid as a React child" */}
+<p>{fn}</p> {/* Error "Functions are not valid as a React child" */}
+```
+
+=== Persistence
+/ Möglichkeiten für Persistence: localStorage, URL Parameter, sessionStorage, Cookies, indexedDB, externe DB/API.
+    Sensible Daten (z. B. Kreditkarteninfos) nur auf externer DB/API geeignet.
+==== localStorage
+Speichert Daten dauerhaft im Browser + ist isoliert nach Seite, aber für mehrere Sessions (Tabs/Fensters) übergreifend verfügbar.
+Daten bleiben erhalten nach Page Reload und Browser Neustart (kein Ablaufdatum).
+Ist ein einfacher key/value Speicher mit Strings (Tipp: JSON.stringify() für Objekte).
+5-10 MB Platz.
+_Anwendung_: Warenkorb oder Einstellungen.
+```js theme = localStorage.getItem("theme")```,  ```js localStorage.removeItem("theme")```, ```js localStorage.setItem("theme", "dark")```, ```js localStorage.clear();```
+```js
+// localStorage React useState:
+const [theme, setTheme] = useState( localStorage.getItem("theme") || "light");
+// Beim Ändern speichern:
+toggleTheme(() => { setTheme(!theme); localStorage.setItem("theme", !theme); });
+```
+==== sessionStorage
+Daten existieren nur während der Browser Session #hinweis[Tab oder Browser geschlossen -> Daten gelöscht, Page Reload -> Daten noch da].
+Isoliert nach einer Seite und eines Tabs/Fenster.
+API gleich wie bei localStorage (`getItem, removeItem, setItem, clear`)
+
+==== Cookies (siehe Security)
+kleine Datenstücke, die es ermöglichen, Daten zu speichern und zwischen Server und Client
+mitzugeben. \
+nur kleine Datenmenge, können Ablaufdatum haben, können serverseitig gelesen werden. _Anwendung_: Login Sessions, Tracking/Analytics
+==== IndexedDB
+In jedem Browser eingebaute NoSQL DB. Für grössere und strukturierte Datenmengen geeignet.\
+Speichert Objekte, komplexere API, sehr grosse Datenmengen möglich (50-250MB), theoretisch unbegrenzte Lebenszeit. _Anwendung_: Offline Apps, PWA, grosse Datensätze im Browser
+
+==== Externe Datenbank / API
+Daten können auch ausserhalb des Browsers gespeichert werden, zbsp. in "Cloud" Datenbank
+(DBaaS) oder Backend APIs.
+_Vorteile_: Daten für viele User speicherbar, Mehr Logik und Datenverarbeitung möglich, Synchronisation zwischen Geräten, Kommunikation zwischen Nutzern
+
+==== URL
+/ (1.) Daten in URL: #hinweis[uniform resource locator] speichern, Pfad Nutzer sich befindet/welche web resource offen #sym.arrow.r Zustand.
+/ (2.) Zustand der Seite in Suchparameter speichern: #sym.arrow.r z.B. was gesucht wurde
+/ (3.) Search Params/Query String: für Filter, Pagination, Suchanfragen. `https://www.google.com/search?client=firefox-b-d&channel=entpr&q=indexed+collections`. _Plaintext_ auch über HTTPS, nur ASCII, begrenzte Länge (nicht standardisiert)
+/ Clean URLs: keine Informationen über die Interna der Server (z.B. Dateitypen) #hinweis[nutzerfreundlicher, SEO, Links bleiben bei Änderung der Implementation]. _Nicht clean_: `http://example.com/user.php?id=1`, _clean_: `http://example.com/user/1`
+#v(-0.75em)
+#image("assets/url.png")
+#v(-0.2em)
+
+==== JS Array map und filter + list und conditional rendering
+
+/ List Rendering:
+    Eine Anzahl gleicher Komponenten darstellen, aber mit unterschiedlichen Inhalten ```tsx { arr2.map(x => <li key={x}>x</li>); }  ```
+/ Conditional Rendering: Das Layout anpassen `.filter()`, ```js {isInStock ? 'ja' : 'nä'}``` \ ```js {isInStock && 'ja'} ```
+
+/ List Filtering:
+    #v(-0.75em)
+    ```tsx const people = [
+        {name: 'Creola', prof: 'math'}, {name: 'Percy', prof: 'chemist'}    ];
+    const chemists = people.filter(person => person.prof === 'chemist');
+    ```
+/ Sorting: arr.toSorted() / arr.toReversed()
+
+== Komponenten, JSX, Props
+#v(-1em)
+==== Props (Properties)
+Props sind Eingabewerte für Komponenten (Tatsächlich ist das Props Objekt der einzige akzeptierte Parameter)
+- als Attribute übergeben und in Komponentenfunktion als Parameter auslesen
+- Props können immer nur von Parent zum Child übergeben werden
+- immutable
+- Es können nicht nur Strings, sondern alle JS Datentypen als Props übergeben werden, auch andere Komponenten, JSX-Fragmente, Objekte, Listen, oder Funktionen.
+
+#colbreak()
+
+== useState, Eventhandler
+#v(-1em)
+=== Eventhandler
+Funktionen, die Interaktionen im UI mit dem State verbinden.
+```html <button onClick={() => setCounter(counter+1)}>Click Me</button>```
+Native HTML Elemente haben in React spezielle Attribute/Props, die Eventhandler aufnehmen.
+Einige der häufig verwendeten: `onClick` für Buttons, `onChange` für Inputfelder, `onFocus`/`onBlur`.
+```tsx
+// separat -> für längere Handler, oder mehrfach verwendete (Demo 1)
+const clickHandler = () => { alert('submitted') }
+return ( <button onClick={clickHandler}>Click Me</button> )
+// inline -> für kurze Handler, Function nicht aufrufen bei Übergabe
+return ( <button onClick={() => alert("submitted")}>Click Me</button> )
+```
+
+==== Eventhandlers als Props übergeben
+Häufig, wie in der Demo, übergeben wir Eventhandler als Props an Komponenten, um State in
+höhergelegenen Komponenten zu aktualisieren.
+#v(-0.5em)
+```tsx <SearchInput value={searchTxt} onChange={(e) => setSearchTxt(e.target.value)} />
+```
+=== useState
+
+#grid(
+    columns: (42%, auto),
+    gutter: 0em,
+    [
+        ```tsx
+        function ElternComp() {
+          const [name, setName] =
+                    useState("Max");
+          return (
+            <KindComp name={name}
+                    onUpdate={setName}
+            />
+          );
+        }
+        ```
+    ],
+    [
+        ```tsx
+        function KindComp(props) {
+          const { name, onUpdate } = props;
+          return (<div>
+            <h3>current Name: {name}</h3>
+            <input value={name}
+            onChange={(e) => onUpdate(e.target.value) }
+            />
+            </div>);
+        }
+        ```
+    ],
+)
+
+==== weitere Hooks
+*useRef*: um DOM-Nodes zu tracken und damit zum Beispiel _Fokus-Management_ zu betreiben. Änderung von Wert triggered nicht rerender.
+
+==== useReducer
+useReducer z.B. für Tennismatch-Scoring, komplexe Zustandslogik.
+// Demo vl9
+// import { useReducer } from 'react';
+```tsx
+type ReducerActionTypes = 'increment' | 'decrement';
+const reducer = (
+  state: { count: number }, // state ist Zahl von counter
+  action: { type: ReducerActionTypes }, // + oder -
+) => {
+  switch (action.type) {
+    case 'increment':
+      return { count: state.count + 1 };
+    case 'decrement':
+      return { count: state.count - 1 };
+    default:
+      throw new Error('Unknown action type');
+  }
+};
+```
+```tsx
+export const Counter = () => {
+  // use reducer with useReducer hook
+  const [state, dispatch] = useReducer(reducer, { count: 0 });
+  return ( <div>
+      <h3>useReducer</h3>
+      <p>Count: {state.count}</p>
+      <button onClick={() => dispatch({ type: 'decrement' })}>[ - ]</button>
+    </div>);
+};
+```
+== Controlled Forms
+
+#grid(
+    columns: (auto, 52%),
+    gutter: 0em,
+    [
+        ```tsx
+        function Form() {
+            const [formData, setFormData] =
+                useState({
+                    firstName: "",
+                    lastName: "",
+                    email: "",
+                });
+        ```
+    ],
+    [
+        #move(dy: -2em, dx: 1.5em, [
+            *Flow of a Controlled Component*
+            #v(-0.8em)
+            #image("/WE2/assets/controlled-component.svg")
+        ])
+    ],
+)
+#v(-3em)
+```tsx
+// generalized changehandler:
+const handleChange = (e: React.SubmitEvent<HTMLFormElement>): void => {
+    const { name, value } = e.target;
+    setFormData((prevState) => ({ ...prevState, [name]: value }));
+};
+// statt typed event ^, auch mit typed eventhandler möglich:
+const handleChange: React.SubmitEventHandler<HTMLFormElement> = (e) => {..}
+...
+<label htmlFor="firstName">First Name:</label>
+<input type="text" name="firstName" id="firstName"
+    value={formData.firstName} onChange={handleChange} />
+```
+
+== TypeScript
+Typisierung von Objekten, Props, Funktionen.
+/ typeof: für Type narrowing ```js (typeof val === "string") ``` (und Typ Inferenz von Typescript), _mögliche Typen_: `string`, `number`, `bigint`, `boolean`, `symbol`, `undefined`, `object`, `function`. (Achtung: `typeof` `null` und `array` ist `object`)
+/ Array: ```js Array.isArray(data) ```,
+/ Discriminated Union: ```js switch (shape.kind) { case "circle": ... } ```
+/ weitere Typprüfungen: ```js instanceof(HttpError) ```, ```js if (var == null)```
+/ declare: existierende Variable deklarieren, sagen, dass es die gibt
+/ as: ```js let len = (x as string).length;``` Typ neu zuweisen: Typprüfung ändern, Fehler möglich
+
+#v(-0.5em)
+// mit bitzli von finns zusammenfassung und angepasst :)
+```ts
+type Status = "idle" | "loading" | "success" | "error";
+const [status, setStatus] = useState<Status>("idle");
+// Type Alias als Component Name + Props
+type ButtonProps = { label: string; onClick: () => void; };
+// Using the Type Alias to type the props
+export function Button({ label, onClick }: ButtonProps) {
+return <button onClick={onClick}>{label}</button>;
+```
+#v(-0.5em)
+
+/ Never: Bedeutet der Wert soll nicht existieren. (z. B. Rückgabetyp bei Exceptions)
+/ Undefined: Eine Variable wurde deklariert, ihr aber nie ein Wert zugewiesen.
+/ Null: Expliziter Wert, der sagt, das ist kein Objekt oder Wert
+/ Generics: : Platzhalter für Typen
+#v(-0.5em)
+```js
+function identity<T>(x: T): T { return x; }
+// Generics werden auch von useState und Array verwendet:
+const [name, setName] = useState<string | null>('alice');
+const names: string[] = []; // Kurzschreibweise
+const names: Array<string> = []; // Langschreibweise
+```
+
+// /* // auskommentieren wenn kein Platz
+*? (Optionales Property/Parameter)* ist implizit "… | undefined"
+// Optional parameter (implicitly `string | undefined`)
+#v(-0.5em)
+```js
+function greet(name?: string) { return `Hello, ${name || 'stranger'}`; }
+```
+Typescript prüft die *Struktur*, nicht die Benennung
+#v(-0.5em)
+```ts
+type Ball = { diameter: number; } type Sphere = { diameter: number; }
+let ball: Ball = { diameter: 10 }; let sphere: Sphere = { diameter: 20 };
+sphere = ball; ball = sphere; // korrekt
+```
+
+*Any* deaktiviert Typ-Checking
+
+*Unknown*
+Kann alles sein und muss überprüft werden (mit typeof oder parse, etc).
+Type Checking während Runtime nennt man Type Narrowing. // doppelt erwähnt aber egal
+#v(-0.5em)
+```ts
+function printValue(value: string | number) {
+    if (typeof value === "string") { console.log(value.toUpperCase());
+    } else { console.log(value.toFixed(2)); /* value : number */ } }
+```
+// */
+```ts
+function myFunc (callbackFn: (result: string) => void) : void {
+    ...  callbackFn(result); }
+```
+
+== React Routing mit ReactRouter
+Mit React Router: ```js <Route path="/" element={<Home />} /> ``` Kann: Mehrere Seiten darstellen #hinweis[es sieht dann aus wie eine "traditionelle" Webseite, inklusive änderung der URL, aber ohne Reloads (Client Side Routing)], URL parameter und Query Strings verwenden,
+Browser History und Navigation verwenden.
+```tsx
+<BrowserRouter> <!-- BrowserRouter im Idealfall im main.tsx platzieren -->
+    <Routes>
+        // Index Routes: renders into <Outlet/> at parent's URL
+        <Route index element={<Home />} /> // index equals path="/"
+        <Route path="about" element={<About />} />
+        // Nested Routes: use <Outlet /> in AuthLayout to render child
+        // and Layout Routes: does not add segments to URL
+        <Route element={<AuthLayout />} >
+            <Route path="login" element={<Login />} />
+            <Route path="register" element={<Register />} />
+        </Route>
+        // Route Prefixes: A <Route path> without element prop = path prefix to child routes, without parent layout.
+        <Route path="concerts" >
+            <Route index element={<ConcertsHome />} />
+            // Dynamische Routes / Route Params: becomes dynamic segment
+            <Route path=":city" element={<City />} /> // {city} = useParams();
+            <Route path="trending" element={<Trending />} />
+        </Route>
+        // catch all/splat/star: ends with *
+        <Route path="files/*" element={<File />} />
+        // let params = useParams(); // params["*"] =remaining URL
+        // let filePath = params["*"];
+    </Routes>
+</BrowserRouter>
+```
+
+== useEffect & API Calls
+/ "direkt sofort nach dem ersten Rendern": useEffect hat noch nicht geladen, beachte auch timeouts im code
+
+== Context API
+*Einige Interessante Anwendungsfälle für useContext*: Automatische Heading-Einstufung, Informationen zum angemeldeten User, Globaler State für Clientside-only Anwendungen, Localization, App Settings, Light/Dark Theme (auch in reinem CSS lösbar
+
+
+==== useContext zur Vermeidung von Prop-drilling?
+Nicht immer: in typischen React Anwendungen gerne ein
+Duzend Props pro Komponente
+zusammenkommen, und dass es üblich ist,
+Daten über einige Stufen zu übergeben. \ ein expliziter Datenfluss ist
+an sich nichts schlechtes.
+
+*Lösungsansätze für Prop-Drilling*
+1. State näher an Nutzung verschieben
+2. Komponentenstruktur verbessern (Refactoring) (siehe auch nächste Slide)
+3. Intentional weiterhin Props verwenden
+4. Context API verwenden
+5. WebStorage (Session/Local) + Custom Hooks verwenden (mit/ohne Context)
+6. Zusätzliche State Management Libraries (Zustand, Redux, ...)
+
+#grid(
+    columns: (auto, auto),
+    // gutter: 0em,
+    [
+        ```tsx
+        // vorher
+        const Layout = ({ posts }) => {
+        return (
+            <div className="layout">
+                <Header />
+                <Posts posts={posts} />
+            </div>
+        );  }
+        // --- Verwendung
+        <Layout posts={posts} />
+        ```
+
+    ],
+    [
+        ```tsx
+        // nachher
+        const Layout = ({ children }) => {
+        return (
+            <div className="layout">
+                <Header /> {children}
+            </div>
+        );  }
+        // --- Verwendung
+        <Layout>
+            <Posts posts={posts} />
+        </Layout>
+        ```],
+)
+
+
+== CSS
+// von finns zusammenfassung
+*Trennung von Page- und Komponentenlayouts*:
+styles/base.css (resets, typography),
+variables.css (tokens, colors),
+layout.css (top-level page layout). _Cascades_ vermeiden #sym.arrow.r _Composition_ nutzen. Z.B. via classname (anstatt ```css.button--primary``` #sym.arrow.r ```css.button .primary```)
+/ CSS Nesting: Verschachtelung ist ok, muss aber "flach" gehalten werden (maximal 3 Ebenen tief).
+/ Einheiten: Verwende konsequent rem anstelle von px, für Barrierefreiheit (Skalierbarkeit)
+/ Gruppierung: Deklarationen innerhalb einer Regel sollten in einer logischen Reihenfolge stehen (z. B.erst Positionierung, dann Box-Modell wie Display/Padding, dann Farben/Text).
+/ Shorthands vermeiden: Nutze keine unleserlichen Shorthands wie padding: 1.2rem 0.8rem 1rem;.
+/ Margin vermeiden: Versuche, «margin» weitgehend zu vermeiden.
+/ Gap & Padding: Nutze stattdessen Flexbox oder Grid in Kombination mit gap für Abstände zwischen Elementen und padding für Abstände innerhalb von Elementen.

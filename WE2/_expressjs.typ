@@ -1,0 +1,325 @@
+#import "../template--additional-formatting-templates.typ": *
+
+/* zum testen:
+#import "../template_cheatsheet.typ": *
+#import "@preview/wrap-it:0.1.1": wrap-content
+
+#show: project.with(
+    authors: ("Jasmin Fässler",),
+    fach: "WE2",
+    fach-long: "Web Engineering 2",
+    semester: "FS26",
+    language: "de",
+    column-count: 5,
+    font-size: 4pt,
+    landscape: true,
+)
+// */
+
+#import "/WE2/helpers.typ": *
+
+= ExpressJS
+
+== Express Architektur und Grundlagen
+/ MVC Pattern: Model (DB) View (hbs) und Controller (index.js, app.js) getrennt
+/ Front-Controller Pattern:
+     // https://martinfowler.com/eaaCatalog/frontController.html
+    Bild: Request -> Front Controller -> Controller (können verschiedene Controller sein) -> controller zu Model für Daten, zu View für Rendering und Response.
+#v(-0.5em)
+#image("/WE2/assets/front-controller.svg", width: 100%)
+/ Middleware Pattern:
+    Verkettung von Middlewares pro Request, gemäss "Chain of Responsibility" Pattern. Express verwendet Middleware im Front Controller und Routing. Beispiel wenn nicht angemeldet, kann Auth. Middleware direkt Fehler Response senden und es wird nicht weitergegeben.
+/ jede Middlware: ist für genau eine Aufgabe verantwortlich, kann eine Aufgabe ausführen, muss den Request beenden oder weitergeben
+/ Chain of Responsibility:
+    is a behavioral design pattern that lets you pass requests along a chain
+    of handlers. Upon receiving a request, each handler decides either to process the request or to
+    pass it to the next handler in the chain.
+
+
+/ Was ist CSR?: Client Side Rendering, rendert im Browser, bei Client, React
+/ Vor- und Nachteile CSR?: schnellere Reaktion, weniger Arbeit auf Server, interaktiv. _Nachteile_: SEO, benötigt JS, Content Seiten die selten ändern rendern neu.
+/ typische Websiten CSR?: Games, Social Media, Google Earth
+#v(-0.2em)
+/ Was ist SSR?: fertige statische Website von Server geliefert an Client, ExpressJS
+/ typische Websiten SSR?: Blogs, statische Webseiten, News Portal
+/ Vor- und Nachteile SSR?: Performance, SEO, einfach, nicht mehrfach die gleiche Seite rendern. // #hinweis[siehe Vorteile CSR]
+
+== Cookies und ExpressJS Session
+- Um nach dem Login die Session auf der Website "abzusichern"
+
+#ascii-art(
+    "Client                                             Server
+ |  POST /login                                       |
+ | -------------------------------------------------> |
+ |                set-cookie: session-id:1234         |
+ | <------------------------------------------------- |
+ |                                                    |
+ |  GET /addToCard?id=12  cookie: session-id:1234     |
+ | -------------------------------------------------> |
+ |                                                    |
+ |   GET /submitCard  cookie: session-id:1234         |
+ | -------------------------------------------------> |
+ |                                                    |
+",
+)
+
+Server: `set-cookie:name=value;Expires=Wed, 09 Jun 2029 10:18:14 GMT`
+Client: `cookie:name=value; name2=value2`
+
+- Cookies für "ExpresJS Session": ```js app.use(session({ secret: ,'1234567', resave: false, saveUninitialized: true})); ```
+
+// import express from 'express';
+// import cookieParser from 'cookie-parser';
+```js
+const app = express();
+app.use(cookieParser("secret"));
+
+app.get("/cookieDemo/{*splat}", function (req, res) {
+    console.log(JSON.stringify(req.cookies));
+    console.log(JSON.stringify(req.signedCookies));
+    res.cookie("url", req.url);
+    res.cookie("signedUrl", req.url, {signed: true});
+    if (req.cookies.url) {
+        res.end(`das war dein letzter Besuch:
+        Cookie: ${req.cookies.url}
+        SignedCookie: ${req.signedCookies.signedUrl || "---"}`);
+    } else { res.end("erster Besuch?!") }
+});
+
+app.listen(3000, function () {
+    console.log('listening on http://localhost:3000');
+});
+```
+
+
+== JSON Web Token (JWT) JSON-based open standard (RFC 7519).
+- um eine API abzusichern (REST)
+/ HTTP-Header: `Authorization: Bearer <token>`
+/ Inhalt: Header, Payload (Claims), Signatur
+/ HTTPS: Token nur über eine sichere Verbindung versenden
+/ speichern: Token kann auch im Cookie abgelegt werden #hinweis[mit `httpOnly, secure, SameSite, Lebensdauer` und Achtung CSRF]
+
+#block(
+    sticky: true,
+    [
+
+        // +-----------+                                  +-----------+
+        // |  Browser  |                                  |  Server   |
+        // +-----------+                                  +-----------+
+        #ascii-art(
+            "Browser                                     Server
+ |  1. POST /users/login (username, pw)  ->   |
+ | -----------------------------------------> |
+ |                                            | 2. Creates JWT
+ |   3. Returns the JWT to Browser  <-        |
+ | <----------------------------------------- |
+ |                                            |
+ |   4. Sends JWT on Authorization Header ->  |
+ | ------------------------------------------>|
+ |                                            | 5. Check JWT signature
+ |   6. Sends response to the client  <-      | Get user info from JWT
+ | <----------------------------------------- |
+",
+            //  |                                            |
+        )
+    ],
+)
+
+== AJAX mit fetch Repetition
+```js
+fetch(url, {
+    method: method, headers: { 'Content-Type': 'application/json'},
+    body: JSON.stringify(data), credentials: 'include', // cookies mitsenden
+}).then(x => {
+    return x.json(); // statt json() -> arrayBuffer(), blob(), formData(), text()
+});
+
+// Hilfsklasse für Request von Fetch API
+const myHeaders = new Headers();
+myHeaders.append('Content-Type', 'text/plain');
+    const myInit = { method: 'GET', headers: myHeaders, cache: 'default'
+};
+const myRequest = new Request('/example', myInit); fetch(myRequest) /*…*/
+```
+
+== View mit Template Engine - Handlebars
+// Statt ```js res.type('text/html'); res.write("<html>"); res.write("<p>..</p>"); ... ```.
+Statt ```js app.get('/', (req, res) => { res.type('text/html'); res.write("<html>");... res.end(); });```, Template Engines nutzen, kombinieren Daten und Template zu HTML (Hbs, Pug) // pug hiess früher Jade
+\ *Begriffe*: _Layouts_ Definieren wiederverwendbare Grundstrukturen, _Partials/Components_ Wiederverwendbare Template-Bausteine, _Helpers_ Hilfsfunktionen, Erweiterung der Template-Sprache
+===== Beispiel Template:
+```js
+res.render("template", { pizzaName: "Hawaii", _id: 3, state: "OK",
+                        description: "Movies", items: songs     });
+```
+#v(-0.5em)
+```html
+// template.hbs, pizza und movies Beispiel kombiniert:
+<p>Order-Infos</p>
+{{#if pizzaName}}
+    <p>Ordered Pizza: {{pizzaName}}</p>
+    {{#if_eq state "OK"}}
+        <form action='/orders/{{_id}}' method='post'> // nicht accessible form:
+            <input type='hidden' name='_method' value='delete'>
+            <input type='submit' value='Delete order'>
+        </form>
+{{/if_eq}} {{/if}}
+<figure><ul>
+    {{#each items}}// title == this.title = bezieht sich auf items
+        <li><h3>{{title}}</h3><p>{{this.artist}}</p></li>
+    {{/each}}
+    </ul><figcaption><p>{{description}}</p></figcaption>
+</figure>
+```
+#v(-0.5em)
+*Helpers / Variablen*: ```html {{@root}} {{@root.foo}} {{#if @first}} {{@index}} {{#with person}} ```
+// /*
+===== Beispiel als Express View
+```js
+// 1. import express-handlebars
+import exphbs from 'express-handlebars';
+const app = express();
+// 2. configure
+const hbs = exphbs.create({
+    extname: '.hbs', defaultLayout: "default", helpers: { ...helpers }
+});
+// 3. set engine and global values
+app.engine('hbs', hbs.engine);
+app.set('view engine', 'hbs');
+app.set('views', path.resolve('views')); // 4. path to views
+app.use(orderRoutes); // von order-routes.js importiert, siehe unten
+```
+// implizit: app.render(view, [locals], callback) // das rendert hbs zu string ???
+//
+// app.render gibt html als string zurück, beispiel:
+// const html = await new Promise((resolve, reject) => {
+//     app.render('home', { pizzaName: 'Hawaii' }, (err, html) => {
+//         if (err) reject(err);
+//         else resolve(html);
+//     });
+// });
+// console.log(html); // HTML string
+// */
+```html
+// views/layouts/default.hbs:
+<!doctype html><html lang="en">  <head>
+    <meta charset="UTF-8"> <title>Pizza</title>
+    {{#if dark}}<style>body {background: black; color: white; }</style>{{/if}}
+</head> <body>{{{body}}}</body> // body mit html, {{body}} wäre ohne html
+</html>
+```
+===== Beispiel Layout - Trennung View und Controller
+```js
+export class OrdersController {
+    showIndex = (req, res) => { res.render("index") }; // views/index.hbs
+    createPizza = async (req, res) => { res.render("succeeded", [DATA]); };
+}   export const ordersController = new OrdersController();
+```
+```js
+// order-routes.js, (importiert ordersController)
+router.get("/", ordersController.showIndex); // html string an Nutzer gesendet
+router.post("/orders", ordersController.createPizza);
+```
+
+== Middlewares
+#v(-1.25em)
+=== Routing
+Middleware befindet sich auf dem Express Objekt
+#v(-0.5em)
+```js
+import express from 'express'; const router = express.Router();
+```
+Wichtige Methoden
+#v(-0.5em)
+```js
+// Wird unabhängig vom der HTTP-Methode aufgerufen
+router.all(path, [callback, ...] callback)
+```
+
+Wird aufgerufen, falls die jeweilige HTTP-Methode verwendet wurde\
+*METHOD* = .all, .get\
+*path* = `/*, /{*} (optional), /:id (wird in req.params.id gespeichert)`
+#v(-0.5em)
+```js
+router.METHOD(path, [callback, ...] callback)
+router.get('/', function(req, res){ res.send('hello world'); });
+```
+
+Es können mehrere Callbacks als Chain übergeben werden
+#v(-0.5em)
+```js
+router.get("/admin", ensureAdmin, renderAdmin);
+router.get("/profile/:id", ensureUser, renderProfile)
+```
+
+=== Static-Middleware
+Statische Files ausliefern (Es sind mehrere static-routes möglich)
+#v(-0.5em)
+```js
+app.use(express.static('public'))
+```
+
+=== Custom-Middleware
+==== 3 Parameter (request, response, next)
+- `next` zeigt auf die nächste Middleware im Stack, kann aufgerufen werden, um die nächste Middleware aufzurufen.
+#v(-0.5em)
+```js
+function myDummyLoggerMiddleware(options = {}) {
+    options = {timestamp: true, ...options};
+    return function myInnerDummyLogger(req, res, next) {
+        const timestamp = options.timestamp ? new Date().toISOString() + " " :"";
+        console.log(`${timestamp}${req.method} ${req.url}`)
+        next();
+}   }  app.use(myDummyLoggerMiddleware());
+```
+
+==== Error-Middleware
+- muss 4 Parameter haben, die letzte (Error) Middleware muss die Anfrage beenden
+- aufgerufen bei: `next(new Error("…"));`, `Promise.reject(new Error("..."))`, `throw new Error("...")`
+#v(-0.5em)
+```js
+app.use(function(err, req, res, next) {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
+});
+```
+
+
+
+
+
+
+
+
+#pagebreak()
+
+
+== Model = Service (ExpressJS)
+/ Möglichkeiten, um Daten zu speichern (Server): \
+    _In Memory_ (Array, temporär),
+    _JSON_ (Datei),
+    _NoSQL-DB_ (Dokumentorientierte DB (nedb, MongoDB)),
+    _SQL-DB_ (SQLite)
+    (siehe auch Persistence bei React)
+
+==== nedb NoSQL
+```js
+// Datenbank laden
+import Datastore from '@seald-io/nedb';
+const db = new Datastore({filename: './data/order.db', autoload: true});
+
+// Einfügen - Feld _id wird gesetzt: eindeutige ID von der Datenbank
+const order = new Order(pizzaName, orderedBy); const newOrder = await db.insertAsync(order);
+console.log(newOrder._id) // eM3RIO9MTAPaYTIS
+
+// Suchen - find oder findOne
+const order = db.findOneAsync({_id: id});
+
+// Updaten -  z.B. Einzelne Werte ändern, Array von einem «document» anpassen, ganzes Objekt ersetzen
+await db.updateAsync({_id: id}, {$set: {"state": OrderState.DELETED}});
+```
+
+== POST Redirect zu GET
+Vorteil beim _Redirect von POST /random nach GET /random?from=…_ gegenüber der direkten Darstellung der Daten in der POST-Route?
+- Formulardarstellung nur 1 mal programmieren, einheitlich, DRY
+- URL kann weitergegeben werden von GET, Lesezeichen kann erstellt werden.
+- Mit F5 (neuladen) werden bei POST die Daten nochmals abgesendet (mit Warnung Popup vom Browser). Bei GET wird nur die Seite neu geladen.

@@ -1,0 +1,1080 @@
+
+#import "../template--fonts-colors.typ": *
+#import "../template--additional-formatting-templates.typ": *
+#import "@preview/wrap-it:0.1.1": wrap-content
+
+
+/*
+// zum separat exportieren oder als Vorschau
+// Compiled with Typst 0.13.1
+#import "../template_cheatsheet.typ": *
+
+#show: project.with(
+    authors: ("Jasmin Fässler", "Nina Grässli", "Jannis Tschan"),
+    fach: "ParProg",
+    fach-long: "Parallel Programming",
+    semester: "FS26",
+    language: "en",
+    column-count: 5,
+    font-size: 4pt,
+    landscape: true,
+)
+// */
+
+
+#import "./helpers.typ": *
+
+
+= GPU (Graphics Processing Unit)
+/ End of Moores Law:
+    We can no longer gain performance by "growing" sequential processors (and same price). Instead, _improve
+    performance_ by running code in _parallel_ on _multi-core (CPUs)_ #hinweis[(Low Latency)] and
+    many-core or _massively parallel co-processors (GPUs)_ #hinweis[(high throughput)].\
+/ GPU's:
+    specialized electronic circuits designed to accelerate the computation of _computer graphics_.
+    They are faster than CPUs for suitable algorithms on large datasets. _Useful_ for
+    calculations which consist of _multiple independent sub-calculations_, not very useful for
+    calculations where the results rely on the previous results #hinweis[(like Fibonacci)].\
+/ High Parallelization:
+    A _CPU_ offers few cores #hinweis[(4, 8, 16, 64)] and is very fast. Programming is easier.
+    A _GPU_ offers a very large number of cores #hinweis[(512, 1024, 3584, 5760)] and has very
+    specific slower processors. It is optimized for throughput. Programming is more difficult.\
+/ GPU Structure:
+    A GPU consists of multiple _Streaming Multiprocessors (SM)_ which in turn consist of multiple
+    _Streaming Processors (SP)_ #hinweis[(e.g. 1-30 SM, 8-192 SPs per SM)].\
+
+/ SIMD:
+    Single Instruction Multiple Data. The _same instruction_ is executed simultaneously on
+    _multiple cores_ working on _different data elements_ #hinweis[(Vector parallelism)].
+    Saves fetch & decode instructions.\
+/ SISD:
+    Single Instruction Single Data. Purely _sequential_ calculations.\
+/ SIMT:
+    Single Instruction Multiple Threads. The same instruction is executed in different threads over different data.
+
+#gekuerzt[
+    #v(-1em)
+    #image("img/cuda-thread-pool.svg"),
+    #v(-2em)
+]
+
+== Latency vs. Throughput
+/ Latency:
+    _Elapsed time_ of an event
+    #hinweis[(Walking from point A to B takes one minute, the latency is one minute)].\
+/ Throughput:
+    _The number of events_ that can be executed per unit of time #hinweis[(Bandwidth)]\
+    There is a _tradeoff_ between latency and throughput. Increasing throughput by pipelined
+    processing, latency most often also increases.
+    All pipeline stages must operate in _lockstep_.
+    The _rate of processing_ is determined by the _slowest step_.\
+/ Pipelining:
+    Run processes in an overlapping manner.\
+/ Example:
+    A program consists of two operations:
+    Transfer data from CPU memory to GPU memory ($T_1$ units = #tcolor("grün", "20ms")),
+    Execute computation on the device ($T_2$ units = #tcolor("orange", "60ms")). \
+    What is the _latency_ (non-pipelined)? $fxcolor("grün", 20) + fxcolor("orange", 60) = underline(80"ms")$.\
+    What is the _throughput_ (pipelined)? Every #tcolor("orange", "60ms") an operation is finished.\
+    Throughput = $1\/60$ operations/ms.
+
+#table(
+    columns: (39%, auto),
+    table.header[CPUs][GPUs],
+    [
+        - _Low latency_
+        - Few but _optimized cores_
+        - _General purpose_
+        - Architecture and Compiler help to run any code fast
+    ],
+    [
+        - Can execute _highly parallel data_ operations
+        - Simple but a _lot of cores_ with cache per core
+        - very useful for problems which consist of a _lot of independent data elements_
+        - Efficiency must be achieved by _optimizing_ the program
+    ],
+
+    [
+        *Aim:* low latency per thread
+    ],
+    [
+        *Aim:* high throughput
+    ],
+)
+
+== NUMA Model
+NUMA stands for _Non-Uniform Memory Access_. CPUs on host and GPU devices each have local
+memories. There is _no  main memory_ between the two, so _explicit transfer_ between CPU
+and GPU is needed. There is also _no garbage collector_ on the GPU.
+
+== CUDA
+Computer Unified Device Architecture. Is a _parallel computing platform and an API_ for Nvidia
+GPU that allows the host program to use GPUs for general purpose processing.
+
+==== CUDA Kernel
+A kernel is a function that is executed $n$ times in parallel by $m$ different CUDA threads.
+Only the GPU knows when the task is finished.
+
+== CUDA Code and CUDA Flow
+// ```cpp
+// for (int i = 0; i < N; i++) { C[i] = A[i] + B[i]; } // sequential
+// ```
+```cpp
+// kernel definition on GPU
+__global__
+void VectorAddKernel(float *A, float *B, float *C) {
+  int i = threadIdx.x; C[i] = A[i] + B[i];
+}
+```
+```cpp
+void CudaVectorAdd(float* h_A, float* h_B, float* h_C, int N) {
+  size_t size = N * sizeof(float);
+  float *d_A, *d_B, *d_C; // for data on GPU:
+  // 1. GPU memory allocate, error handling: handleCudaError(cudaMalloc(..))
+  cudaMalloc(&d_A, size); cudaMalloc(&d_B, size); cudaMalloc(&d_C, size);
+  // 2. Data transfer to GPU (HostToDevice):
+  cudaMemcpy(d_A, h_A, size, cudaMemcpyHostToDevice);
+  cudaMemcpy(d_B, h_B, size, cudaMemcpyHostToDevice);
+  // 3. Kernel execution, N is amount of threads:
+  VectorAddKernel<<<1, N>>>(d_A, d_B, d_C, N);
+  // 4. Transfer results from GPU to CPU (DeviceToHost):
+  cudaMemcpy(h_C, d_C, size, cudaMemcpyDeviceToHost);
+  // 5. Deallocate GPU memory:
+  cudaFree(d_A); cudaFree(d_B); cudaFree(d_C);
+}
+```
+
+#let bound-content = {
+    [
+        #v(-8em)
+        *Compute Bound*
+        #image("img/compute-bound.svg")
+        *Memory Bound*
+        #image("img/memory-bound.svg")
+    ]
+}
+#wrap-content(
+    bound-content,
+    align: top + right,
+    columns: (68%, 32%),
+)[
+    == Performance Metrics
+    The performance is either limited by _memory bandwidth_ or _computation_.
+    / Compute Bound:
+        Throughput is limited by calculation #hinweis[(Cores are at the limit, but the memory bus
+            could transfer more data)].\ _This is better and reached if AI Kernel > AI GPU_.\
+    / Memory Bound:
+        Throughput is limited by data transfer #hinweis[(Memory bus bandwidth is at its limit, but
+            cores could process more data)].\
+    / Arithmetic intensity:
+        Defined as FLOPS #hinweis[(Floating Point Operations per Second)] per Byte.
+        The higher, the better.\
+        #box($ "Number of operations" / "Number of transferred bytes" = "FLOPS" / "Bytes" $)
+]
+#v(-1em)
+==== Exercise (Arithmetic intensity = operational intensity)
+Assume 32-bit integer addition and multiplication. The components of z, x, and y are 4 bytes. Calculate the
+arithmetic intensity. x and y need to be fetched from memory and the result z is written back. \
+#hinweis2[(Arrayzugriff = 4 Byte (pro int Wert). Operationen `+,*..`, Zuweisung `=` ist keine Operation)]
+1. ```cpp for(i=0; i<N, ++i) { z[i] = x[i] + y[i] * x[i]; }```\
+    Read `x` and `y` from memory, write `z` to memory.
+    That's 2 reads and 1 write #hinweis[(`x` is used twice but read only once)].
+    In case `x`, `y` and `z` are `int`s, we have #fxcolor("grün", "12") #hinweis($(3 dot 4)$) bytes
+    transferred and $#fxcolor("orange", "2")$ arithmetic ops ($+$, $*$).
+    The arithmetic intensity is
+    #text(
+        size: 1.2em,
+        [
+            $#fxcolor("orange", "2") / #fxcolor("grün", "12") =
+            #fxcolor("orange", "1") / #fxcolor("grün", "6")$.
+            //  $2/12 = 1/6$
+        ],
+    )
+    #v(0.5em)
+2. ```cpp for(i=0; i<N, ++i) { z[i] = x[i] + y[i]; }```\
+    1 Operation (Compute).
+    3 Zugriffe (access Memory) = $3*4=12$ Bytes.\
+    // Read `x`, `y` and write to `z` = $3*4=12$ Bytes. Calculate plus (`+`) is 1 Operation.\
+    The arithmetic intensity is
+    #text(
+        size: 1.2em,
+        [
+            $#fxcolor("orange", "1") / #fxcolor("grün", "12")$
+        ],
+    )
+#v(-0.5em)
+/ Maximum Threads = 1024: `VectorAddKernel<<<1, numElements>>>(d_A, d_B, d_C);`.
+=== Roofline model
+#v(-1em)
+#image("img/roofline-model.svg", height: 65pt)
+#v(-1em)
+
+Provides performance estimates of a kernel running on differently sized architectures.
+Has three parameters: Peak performance, peak bandwidth vs. arithmetic intensity.\
+_Peak performance_ is derived from benchmarking FLOPS or GFLOPS #hinweis[(Giga-FLOPS , $10^9$
+    FLOPS)]. The _peak bandwidth_ from manuals of the memory subsystem. The _ridge point_ is where
+the horizontal and diagonal lines meet = minimum Ar.Int. required to achieve the peak performance.
+
+= GPU Architecture
+Because there are so _many cores_ on GPUs, it is possible to run many threads in parallel
+_without context switches_. This allows better parallelism without a performance penalty.
+
+
+#gekuerzt[
+    == Compilation
+    / Just-in-time Compilation:
+        The _NVCC compiler_ compiles the non-CUDA code with the host C compiler and translates code
+        written in CUDA into _PTX instructions_ #hinweis[(assembly language represented as ASCII
+            text)]. The graphics driver compiles the PTX into _executable binary code_.
+        The assembly of PTX code is _postponed until application runtime_, at which time the target
+        GPU is known. The _disadvantage_ of this is the _increased application startup delay_.
+        However, thanks to cache this only happens once #hinweis[(warmup)].\
+    / Programming Interface:
+        _Runtime_ #hinweis[(The `cudart` library provides functions that execute on the host to
+            (de-)allocate device memory, transfer data etc.)] or _driver API_ #hinweis[(The CUDA driver API
+            is implemented in the `cuda.dll` or `cuda.so` which is copied on the system during installation
+            of the driver. This provides an additional level of control by exposing lower-level concepts
+            such as CUDA contexts. Often overkill)]. \
+    / Asynchronous Execution:
+        The command pipeline in CUDA works asynchronous, commands and data can be transferred from/to
+        the GPU at the same time.
+]
+
+== CUDA SIMT Execution Model
+*S* #h(-0.2em)ingle *i* #h(-0.2em)nstruction, *M* #h(-0.2em)ultiple *T* #h(-0.2em)hreads.
+The kernel is executed $N$ times in parallel by $N$
+different CUDA threads.
+/ Blocks:
+    Threads are _grouped_ in blocks. The host can define how many threads each block has
+    #hinweis[(up to 1024)]. Threads in one block can _interact_ with each other but not with
+    threads in other blocks. \
+#gekuerzt[
+    / Execution Model:
+        _One thread_ runs on _one virtual scalar processor_ #hinweis[(one GPU core)].
+        _One block_ runs on _one virtual multi-processor_ #hinweis[(one GPU Streaming Multiprocessor)].
+        Blocks must be _independent_.\
+    / Thread Pool Abstraction:
+        The compiled CUDA program has e.g. 8 CUDA blocks. The _runtime_ can _choose how to allocate_
+        these blocks to multiprocessors. For a larger GPU with 8 SMs, each SM gets one CUDA block.
+        This enables performance scalability without code changes.\
+    / Guarantees:
+        CUDA guarantees that _all threads in a block_ run on the _same SM_ at the _same time_ and that
+        the blocks in a kernel _finish before_ any block from a new, _dependent kernel_ is _started_.\
+    / Mapping:
+        One SM can run several _concurrent_ blocks depending on the resources needed. Each _kernel_ is
+        executed _on one device_. CUDA supports running _multiple kernels on a device_ at one time.
+]
+== CUDA Kernel specification
+*Specifying Kernel*:
+```cpp VectorAddKernel<<<GRID_dimension, BLOCK_dimension>>>(A,B,C)```\
+Dimensions can be 1D, 2D or 3D and specified via `dim3` which is a structure designed for
+storing block and grid dimensions: ```cpp struct dim3{x; y; z}```.\
+#gekuerzt[
+    ```cpp dim3 dimGrid(2) == dim3 dimGrid(2,1,1)``` #hinweis[(Unassigned components are set to 1)]\
+]
+```cpp VectorAddKernel<<<dimGrid, dimBlock>>>(A,B,C);```\
+_Number of blocks in a grid:_ ```cpp dimGrid.x * dimGrid.y * dimGrid.z ```\
+_Number of threads in a block:_ ```cpp dimBlock.x * dimBlock.y * dimBlock.z```\
+
+/ 1D Grid:
+    We can simply use integers. ```cpp VectorAddKernel<<<1, N>>>``` creates 1 Block with N Threads.\
+/ 2D Grid:
+    ```cpp dim3 gridS(3,3); dim3 blockS(3,3); VectorAddKernel<<<gridS, blockS>>>```\
+/ 3D Grid:
+    ```cpp dim3 gridS(3,2,1); dim3 blockS(4,3,1); VectorAddKernel<<<gridS, blockS>>>```\
+    #image("img/3d-thread-hierarchy.svg", height: 32pt)
+
+/ Device Limits:
+    _Max threads per block:_ 1024,
+    _Max thread dimensions per block:_ (1024, 1024, 64)
+    _Max grid size:_ (2'147'483'647, 65'535, 65'535)
+
+#wrap-content(
+    image("img/matrices.svg"),
+    align: top + right,
+    columns: (50%, 50%),
+)[
+    ==== Calculation Examples
+    ```cpp VectorAddKernel<<<dim3(8,4,2), dim3(16,16)>>>(d_A, d_B, d_C);```\
+    _Amount of Blocks:_ $8 dot 4 dot 2 = 64$ \
+    _Amount of threads per block:_ $16 dot 16 = 256$ \
+    _Threads in total:_ $64 dot 256 = 16'384$
+
+    // threadsPerBlock = blockSize
+    If we have $1024$ threads in a block, how many blocks are needed to launch $N$ threads?\
+    _`int blocksPerGrid = (N + blockSize - 1) / blockSize;`_ \
+    #hinweis[Rounding up is necessary because for 1025 threads, 2 blocks are required]
+]
+#v(-2em)
+
+=== Data Partitioning within threads
+/ Data Access:
+    Each kernel decides which data to work on. The programmers decide data partitioning scheme.
+    `threadIdx.x/y/z` #hinweis[(Thread no. in block)],
+    `blockId.x` #hinweis[(Block no.)],
+    `blockDim.x` #hinweis[(Block size)]\
+/ Partitioning in Blocks: \
+    #v(-0.6em)
+    ```cpp
+    // kernel invocation
+    N = 4097; int blockSize = 1024;
+    int gridSize = (N + blockSize - 1) / blockSize;
+    VectorAddKernel<<<gridSize, blockSize>>>(A, B, C);
+    ```
+/ Boundary Check:
+    More threads than necessary work on the data. If $N = 4097$, 5 Blocks with 1024 Threads are
+    needed which results in _1023 unused threads_. Threads with $i >= N$ must _not be allowed_
+    to write to array $C$ because they might _corrupt the working memory_ of some other thread.
+    #v(-0.5em)
+    ```cpp
+        __global__
+        void VectorAddKernel(float *A, float *B, float *C) {
+          // index based on (blockID, threadID),   1D/2D Grid
+          int i = blockIdx.x * blockDim.x + threadIdx.x;
+          if (i < N) {  C[i] = A[i] + B[i];  } // boundary check
+        }
+    ```
+// N = 4097 = 4*1024 + 1 threads = 5 Blöcke
+
+
+// /*
+// prüfung fs 2020
+```cpp
+// Strided coaliscing Beispiel:
+// Kernel invocation for Array d_a (Pointer im Device Memory) with length len.
+int N = len/2;
+int blockSize = 1024; int gridSize = (N + blockSize - 1) / blockSize;
+pairwise_sum<<<gridSize, blockSize>>>(d_a, len);
+```
+```cpp
+__global__ void pairwise_sum(int* array, int length) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (2*i + 1 < length) {
+        array[2*i] += array[2*i + 1];
+        array[2*i + 1] = 0;
+}   }
+```
+
+
+/*
+// prüfung fs 2020, TODO:
+// bin nicht sicher wie korrekt der code ist. besser ein eigenes Beispiel finden.
+```cpp
+// Full coaliscing, Coalesced Kernel mit Shared Memory:
+__shared__ int cache[1024];
+__global__ void pairwise_sum(int* array, int length) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x; int t = threadIdx.x;
+    int even_length = length - length % 2;
+    if (i < even_length) { cache[t] = array[i]; }
+    __syncthreads();
+    if (i < even_length) {
+        int value = 0;
+        if (i % 2 == 0) { value = cache[t] + cache[t + 1]; }
+        array[i] = value;
+}   }
+int blockSize = 1024; int gridSize = (len + blockSize - 1) / blockSize;
+pairwise_sum<<<gridSize, blockSize>>>(d_a, len);
+```
+// */
+
+== Error Handling
+#gekuerzt[
+    Some functions have return type `cudaError`. Need to check for `cudaSuccess`. It's best to
+    write your own helper function and wrap _every line_ in it. E.g. `handleCudaError()`
+    which prints the error and exits the program.
+]
+```cpp
+void handleCudaError(cudaError error) { if (error != cudaSuccess) {
+        fprintf(stderr, "CUDA error: %s!\n", cudaGetErrorString(error));
+        exit(EXIT_FAILURE);
+} }
+```
+== Unified Memory
+Unified memory allows automatic transfer from CPU to GPU and vice versa.
+No explicit Memory Copy (cudaMemCpy) needed, but other new rules. Error handling still needed.
+#grid2(
+    [
+        ==== CPU Code
+        ```cpp
+        A = (float*)malloc(size);// same for &B and &C
+        vectorAdd(A, B, C, N);
+        free(A); free(B); free(C);
+        ```
+    ],
+    [
+        ==== GPU Code
+        ```cpp
+        // same for &B and &C:
+        cudaMallocManaged(&A, size);
+        // data for A,B,C automatically transferred to device (CPU)
+        VectorAddKernel<<<..,..>>>(A, B, C, N);
+        // wait for GPU, because not blocking:
+        cudaDeviceSynchronize();
+        cudaFree(A); cudaFree(B); cudaFree(C);
+        ```
+    ],
+)
+
+= GPU Performance Optimizations
+*Hardware:*
+A scalable array of multithreaded _Streaming Multiprocessors_ (SMs),
+the _threads_ of a thread block execute _concurrently_ on one multiprocessor,
+multiple _thread blocks_ can execute _concurrently_ on one multiprocessor.
+When thread blocks _terminate_, new blocks are launched on the free multiprocessors.
+
+== Matrix Addition
+
+
+
+```cpp
+__global__
+void MatrixAddKernel(float *A, float *B, float *C) {
+  int column = blockIdx.x * blockDim.x + threadIdx.x;
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  if (row < A_ROWS && col < A_COLS) { // boundary checking
+    C[row * A_COLS + col] = A[row * A_COLS + col] + B[row * A_COLS + col];
+} }
+const int A_COLS, B_COLS, C_COLS = 6;
+const int A_ROWS, B_ROWS, C_ROWS = 4;
+dim3 block = (2,2); dim3 grid = (3,2); // (3,2) == (3,2,1)
+MatrixAddKernel<<<grid,block>>>(A,B,C);
+```
+
+== Matrix Multiplication
+*Parallelization:*
+Every thread computes one element of the result matrix $C$.
+Can be parallelized because results do not depend on each other.
+```cpp
+__global__
+void MatrixMultiply(float *A, float *B, float *C) {
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+  int j = blockIdx.y * blockDim.y + threadIdx.y;
+  if (i < N && j < M) { // boundary checking
+    float sum = 0;
+    for (int k = 0; k < K; k++) {
+      sum += A[i * K + k] * B[k * M + j];
+    }
+    C[i * M + j] = sum;
+} }
+```
+
+== Mapping Threads / Blocks to GPU Warps
+*Warps:*
+Blocks are split into _warps_ #hinweis[(1 Warp = 32 Threads)] and all threads within execute
+the same code. If there aren't enough threads to fill a warp, "empty" threads are launched.
+A number of warps constitutes a _thread block_. A number of _thread blocks_ are assigned to a
+_Streaming Multiprocessor_. The whole GPU consists of several SM.\
+Thread blocks are scheduled in _parallel_ or _sequentially_. Once a thread block is _launched_
+on a SM, _all of its warps are resident_ until their execution finishes. Therefore, a _new
+block on a SM_ is _not launched until_ there is a _sufficient number_ of free registers and
+shared memory for _all warps_ of the new block.\
+/ Warp Execution:
+    All threads in a warp execute the same instruction #hinweis[(SIMD)]. A SM can accommodate all
+    warps of a block, but only _a subset_ is _running in parallel_ at the same time
+    #hinweis[(1 to 24)].\
+/ Warps are split: sequentially by threadIdx.x/y/z in 32 steps
+/ Divergence:
+    Different branches in same warp. #hinweis[if/switch/while/do/for]. Performance problem, because SM can execute only instruction of one branch and the other threads have to wait.
+
+    #v(-0.5em)
+    #grid(
+        columns: (1.75fr, 2fr),
+        gutter: 0.1em,
+        [
+            ```cpp
+            // bad case, divergence in same warp
+            if (threadIdx.x > 1) { } else {  }
+            ```
+        ],
+        [
+            ```cpp
+            // good case, all t in warp in same branch
+            if (threadIdx.x / 32 > 1) { } else { }
+            ```
+        ],
+    )
+
+/ DRAM (Dynamic Random Access Memory):
+    _Global memory of a CUDA device_ is implemented with DRAMs. If a GPU kernel accesses data from _consecutive locations_, the DRAMs can supply the data at a much _higher rate_ than if a random sequence of locations were accessed.
+/ Memory Coalescing:
+    Improve performance by using Cache of DRAM. If threads in warp _simultaneously_ access _consecutive memory locations_  (32 byte areas), their reads can be combined into a single access _(burst)_.
+/ Coalesced Accesses:
+    All threads should Read/Write from same burst section in warp, but doesn't matter if only individual elements of burst or swapped access in burst.
+/ Not Coalesced Accesses (strided):
+    Avoid inperformant read/write action over different warp bursts.
+/ Use Coalescing access as follows:
+    _`data[(Expression without threadIdx.x) + threadIdx.x]`_
+/ Coalescing with Matrices:
+    Matrices get linearized to a 1D array. The row of the matrix should be the longer side so that there are as many coalescing accesses as possible.
+
+#print-image(
+    [
+        #image("img/image-9.png")
+    ],
+    v(40pt),
+)
+
+== Memory Model
+All threads have the access to the same _global memory_. Each thread block has _shared memory_
+visible to all threads of the block and with the same lifetime as the block
+#hinweis[(Has higher bandwidth and lower latency than local or global memory but longer latency
+    and lower bandwidth than registers which are private to a thread)].
+Each thread has _private local memory_ #hinweis[(in device memory, high latency and low
+    bandwidth, same as global)]. Constant, texture and surface memory also reside in device memory.\
+/ Memory Hierarchy:
+    _Shared Memory_ #hinweis[(per SM, fast, shared between threads in 1 block, a few KB, `__shared__ float x`)],
+    _Global Memory_ #hinweis[("Main Memory" in GPU Device, slow, accessible to all threads, in GB, `cudaMalloc()`)]
+    _Registers_ #hinweis[(private to a thread, fastest but very limited storage)]\
+/ Constant memory:
+    Constant variables are stored in the _global memory_ but are _cached_.\
+/ Shared Memory Declaration:
+    With keyword `__shared__`. A _static array size_ is necessary. Limited memory, around 48KB.
+    Multidimensionality is allowed.\
+/ Fast Matrix Multiplication:
+    By _reducing global memory traffic_. Partition data into subsets called tiles which fit into
+    shared memory #hinweis[(the row & column that should be multiplied and the result cell)].
+    The kernel computation on these tiles must be able to run _independently_ of each other.
+    Because the shared memory is _limited_, load the tiles in _several steps_ and calculate the
+    _intermediate result_ from this.
+
+```cpp
+__global__ void MatrixMulKernel(float* d_M, float* d_N, float* d_P, int Width) {
+  __shared__ float Mds[TILE_WIDTH][TILE_WIDTH];
+  __shared__ float Nds[TILE_WIDTH][TILE_WIDTH];
+  int bx = blockIdx.x; int by = blockIdx.y;
+  int tx = threadIdx.x; int ty = threadIdx.y;
+  // identify row and column of the d_P element to work on
+  int Row = by * TILE_WIDTH + ty;   int Col = bx * TILE_WIDTH + tx;
+  float Pvalue = 0;
+  // loop over d_M and d_N tiles required to compute d_P element
+  for (int m = 0; m < Width/TILE_WIDTH; ++m) {
+    // collaborative loading of d_M and d_N tiles into shared memory
+    Mds[ty][tx] = d_M[Row*Width + m*TILE_WIDTH + tx];
+    Nds[ty][tx] = d_N][(m*TILE_WIDTH + ty)*Width + Col];
+    __syncthreads(); // CUDA equivalent to wait()
+    for (int k = 0; k < TILE_WIDTH; ++k) {
+      Pvalue += Mds[ty][k] * Nds[k][tx];
+    }
+    __syncthreads();
+  }
+  d_P[Row*Width + Col] = Pvalue;
+}
+```
+#hinweis[
+    ```cpp __syncThreads()``` is only allowed in `if`/`else` if all threads of a block
+    choose the same branch, otherwise undefined behavior.
+]
+
+
+= High Performance Computing (HPC) Cluster Paralleliz.
+Cluster programming is the _highest possible parallel acceleration_ #hinweis[(Factor 100 and
+    more)]. Used for _general purpose programming_, lots of CPU cores. Combination of CPUs and GPUs possible. \
+/ Computer Cluster:
+    Network of _powerful_ computing nodes, firmly connected at one location.\
+    Very _fast interconnect_ #hinweis[(like 100GBit/s)], used for big simulations #hinweis[(Fluids, Weather, Traffic, etc.)]\
+/ SPMD:
+    This is the mostly used programming model, "high level".\
+    _Single Program_ #hinweis[(All tasks execute their copy of the same program simultaneously)],
+    _Multiple Data_ #hinweis[(all tasks may use different data)]. (with MPI below) \
+/ MPMD:
+    Also a "high level" programming model.
+    _Multiple Program_ #hinweis[(Tasks may execute different programs simultaneously)],
+    _Multiple Data_ #hinweis[(all tasks may use different data)].\
+/ Hybrid Memory Model:
+    All processors in a machine can _share_ the memory. They also can _request_ data from other
+    computers. #hinweis[(non-uniform memory access: not all accesses take the same time)]\
+/ Message Passing Interface (MPI):
+    Distributed programming model. Is a  choice for Parallelization on a cluster,
+    Industry-Standard libraries for multiple programming languages.\
+/ MPI Model:
+    Notion of processes #hinweis[(Process is the running program plus its data)], parallelism is
+    achieved by running _multiple processes_, co-operating on the _same_ task. Each process has
+    _direct access_ only to its _own data_ #hinweis[(variables are private)].
+    Inter-Process-Communication by sending and receiving messages.\
+/ SPMD in MPI:
+     // The MPI program is started in several processes.
+    All processes run their _own local copy_ of the program & data. Each process has a _unique
+    identifier_ (rank), processes can take _different paths_ through the program depending on their IDs.
+    All processes start and terminate synchronously. Synchronization is done with barriers.
+    Usually, _one process per core_ is used #hinweis[(to maximize the benefit of parallelization)].\
+/ Formalizing Message:
+    A message transfers a number of data items from the memory of one process to the memory of
+    another process #hinweis[(Typically contains ID of sender and receiver, data type to be sent,
+        number of data items, data itself, message type identifier)].\
+/ Communication modes:
+    _Point to Point_ #hinweis[(very simple, one sender and one receiver. Relies on matching send and receive calls)] and
+    _Collective communications_ #hinweis[(between groups of processes.
+        _Broadcast_: one to all,
+        _Scatter_: Split data and send each chunk to different node,
+        _Gather_: Collect the chunks back at the originating node)].\
+
+
+
+
+#gekuerzt[
+    / `MPI_Init`:
+        Must be _first_ MPI call. Allows the `mpi_init` to broadcast to all the processes.
+        Does _not_ create processes, they are only created at launch time.
+        All MPI _global and internal variables are constructed_.
+        A _communicator_ is formed around all the processes that were spawned and _unique ranks_
+        #hinweis[(IDs)] are assigned to each process.
+        _`MPI_COMM_WORLD`_ encloses all processes in the job.\
+    / Communicator:
+        #hinweis[MPI_COMM_WORLD], Group of MPI processes, allows inter-process-communication.\
+    / `MPI_Comm_rank(..)`:
+        _rank_ of a process in a communicator. Used for sender/receiver IDs.\
+    / `MPI_Comm_size(..)`:
+        _total number_ of processes in a communicator.\
+    / `MPI_Finalize()`:
+        Used to _clean up_ the environment. No more MPI calls after that.\
+    / `MPI_Barrier`:
+        Blocks until all processes in the communicator have reached the barrier.\
+]
+
+/ Process Identification:
+    _Rank_ = number within a group, incremental numbering from 0.\
+    _Unique Identification_ = (Rank, Communicator)
+
+/ Send and Receive: \
+    // Each _send_ should have a matching _receive_.\
+    ```c MPI_Send(void * data, int count, MPI_Datatype datatype, int destination, int tag, MPI_Comm communicator) // tag: freely selectable number for msg type (>= 0)```\
+    ```c MPI_Recv(void * data, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm communicator, MPI_Status* status) // status: error information```
+
+/ Example direct communication: \
+    ```c MPI_Send(&value, 1, MPI_INT, receiverRank, tag, MPI_COMM_WORLD);```\
+    ```c MPI_Recv(&value, 1, MPI_INT, senderRank, tag, MPI_COMM_WORLD, MPI_STATUS_IGNORE);```\
+/ Array send: ```c int array[LENGTH];``` \
+    ```c MPI_Send(array, LENGTH, MPI_INT, receiverRank, tag, MPI_COMM_WORLD);``` \
+    ```c MPI_Recv(array, LENGTH, MPI_INT, senderRank, tag, MPI_COMM_WORLD, MPI_STATUS_IGN);```
+#block(
+    sticky: true,
+    [
+        / `MPI_Bcast`:
+            #grid2(
+                [
+                    #v(-0.7em)
+                    Efficient, because root node does _not send the signal individually_ to each node,
+                    the _other nodes help_ spread the message to others.:
+                    ```c MPI_Bcast(void * data, int count, MPI_Datatype datatype, int root, MPI_COMM_WORLD)```\
+                ],
+                [
+                    #v(-1.7em)
+                    #image("img/mpi_bcast.svg", width: 50pt)
+                ],
+            )
+    ],
+)
+/ `MPI_Reduce`:
+    Reduction is a classic concept: reducing a set of numbers into a smaller set of numbers via a
+    function #hinweis[(e.g. `[1,2,3,4,5] => sum => 15`)]. Each process contains one integer,
+    `MPI_Reduce` is called with a root process of 0 and using `MPI_SUM` as the reduction operation.
+    The four numbers are added and stored on the root process.
+    Job is done in a _distributed manner_.\
+    ```c MPI_Reduce(void* send_data, void* recv_data, int count, MPI_Datatype datatype, MPI_Op op, int root, MPI_COMM_WORLD)```\
+    #hinweis2[
+        _`send_data`_: array of elements of type `datatype` to reduce from each process,
+        _`recv_data`_: relevant on the root process. contains the reduced result and has a size of `sizeof(datatype) * count`. \ ]
+    _MPI_OP_: `MPI_MAX`, `MPI_MIN`, `MPI_SUM`,
+    `MPI_PROD` (multiplies all), `MPI_BAND`/`MPI_LAND` (Bitwise/Logical AND), `MPI_LOR` (Logical OR),
+    `MPI_MAXLOC` (Same as max plus rank of process that owns it)
+    \
+/ `MPI_AllReduce`:
+    Many parallel applications require accessing the reduced results _across all processes_.
+    This function reduces the values and distributes the result to all processes.
+    Does not need a root node. This is an _implicit broadcast_ to all processes.\
+    ```c MPI_Allreduce(void* send_data, void* recv_data, int count, MPI_Datatype datatype, MPI_Op op, MPI_COMM comm)```\
+/ `MPI_Gather`:
+    Gather together multiple values from different processors.\
+    ```c MPI_Gather(&input_value, 1, MPI_INT, &output_array, 1, MPI_INT, 0, MPI_COMM_WORLD)```
+
+== MPI Boilerplate Code
+```c
+int main(int argc, char * argv[]) {
+    // first MPI call, broadcasts to all processes, communicator formed,..
+    MPI_Init(&argc, &argv);
+    int rank; int size; int len;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank); // Process Identification by rank
+    MPI_Comm_size(MPI_COMM_WORLD, &size); // number of processes in comm.
+
+    char name[MPI_MAX_PROCESSOR_NAME]; MPI_Get_processor_name(name, &len);
+    printf("MPI process %i on %s\n", rank, name);
+
+    MPI_Barrier(MPI_COMM_WORLD); // blocks/waits for processes in communicator
+
+    MPI_Finalize(); // MPI Finalization, clean up
+}
+```
+//   return 0; weggelassen, ist ja nicht unbedingt nötig
+
+
+#gekuerzt[
+    ==== Global Average of elements in array
+    // von Prüfung 2023
+    Write a complete MPI program to find the global average of elements spread in arrays across multiple
+    processes. Each process has its own array called anArray of size aSize and each process fills it up with
+    random numbers as shown below. The task is to find the global average across all the arrays.
+    ```c
+    int main(int argc, char **argv) {
+      if (argc != 2) {
+        fprintf(stderr, "Usage: size of the array\n");
+        exit(1);
+      }
+      float avg;
+      int aSize = atoi(argv[1]); // size of anArray
+
+      MPI_Init(NULL, NULL);
+      int world_rank; MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+      int world_size; MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+      // Create a random array of elements on all processes.
+      srand(time(NULL) * world_rank);
+      float *anArray = create_rand_nums(aSize); // assume given
+      float local_sum = 0;
+      int i;
+      for (i = 0; i < aSize; i++) {
+        local_sum += rand_nums[i];
+      }
+      // Print the random numbers on each process
+      printf("Local sum for process %d - %f, avg = %f\n", world_rank, local_sum, local_sum / asize);
+      // Reduce all of the local sums into the global sum
+      float global_sum;
+      MPI_Reduce(&local_sum, &global_sum, 1, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+      float avg = global_sum / (world_size * asize);
+
+      if (world_rank == 0) { printf("average = %f\n", avg); }
+
+      MPI_Finalize();
+    }
+    ```
+    // free weggelassen
+]
+
+== Approximation of $bold(pi)$ via Monte Carlo Simulation <pi-approx>
+Draw a circle inside of a square and randomly place dots in the square. The ratio of dots
+inside the circle to the total number of dots will approximately equal $pi \/ 4$.
+
+#v(-0.5em)
+#grid(
+    columns: (auto, auto),
+    // gutter: 0em,
+    [
+        ```c
+        // Parallel, the trials are split across different nodes
+        int rank, size;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &size);
+        // each process recv. a different seed:
+        srand(rank * 4711);
+        // Each process computes a subtask:
+        long hits = count_hits(TRIALS / size);
+        long total;
+        MPI_Reduce(&hits, &total, 1, MPI_LONG,
+          MPI_SUM, 0, MPI_COMM_WORLD);
+        if (rank == 0) {
+          double pi = 4 * ((double)total
+                                / TRIALS);
+          printf("Pi approx. %f", pi);
+        }
+        ```
+    ],
+    [
+        ```c
+
+
+
+        // Sequential
+        long count_hits(long trials) { long hits = 0, i;
+          for (i = 0; i < trials; i++) {
+            double x = (double)rand()/RAND_MAX;
+            double y = (double)rand()/RAND_MAX;
+            // distance to center bigger than radius=1 :
+            if (x * x + y * y <= 1) { hits++;}
+          }
+        return hits; }
+        ```
+    ],
+)
+= OpenMP
+/ Node:
+    A standalone _"computer in a box"_. Usually comprised of multiple CPU/processors/cores, memory,
+    network interfaces etc. Nodes are _networked together_ to comprise a _supercomputer_.
+    Each node consists of 20 cores. The processes do _not share memory_, they must use messages.\
+/ Threads:
+    Default are 24 on a single Node in OST cluster. Can be set with `omp_set_num_threads()` or with
+    the `OMP_NUM_THREADS` environment variable. Threads range from 0 #hinweis[(master thread)] to N-1.\
+/ HPC Hybrid memory model:
+    Run a program on multiple nodes. No Shared Memory #hinweis[(NUMA)] between Nodes.
+    Shared Memory #hinweis[(SMP)] for Cores inside a Node.\
+/ OpenMP:
+    Is a programming model for different languages.
+    _Allows to run multiple threads_, distribute work using synchronization and reduction constructs.
+    _Shared Memory_ #hinweis[(shared memory process consists of multiple threads)],
+    _Explicit Parallelism_ #hinweis[(Programmer has full control over parallelization)] and
+    _Compiler Directives_ #hinweis[(Most OpenMP parallelism is specified through the use of compiler
+        directives (`pragmas`) in the source code)].\
+
+#gekuerzt[
+    // code einzeln
+    ==== Fork and Join
+    ```c
+    #include <stdio.h>
+    #include <omp.h>
+    int main(int argc, char* argv[]) {
+      const int np = omp_get_max_threads(); // executed by initial thread
+      printf("OpenMP with threads %d\n", np); // executed by initial thread
+      #pragma omp parallel // pragma spawns multiple threads (fork)
+      {
+        const int np = omp_get_num_threads(); // executed in parallel
+        printf("Hello from thread %d\n", omp_get_thread_num()); // executed in paral.
+      } // thread order not fixed. after execution, threads synchronize & terminate
+    return 0; }
+    ```
+
+    ==== For loops
+    ```c
+    #pragma omp parallel for
+      for (i=0; i<n; i++) { ... }
+    ```
+
+    Each thread processes _one loop-iteration_ at a time. Execution returns to the initial threads.
+    _Oversubscription_ #hinweis[(too many threads for a problem)] is handled by OpenMP.
+    The iteration variable #hinweis[(i.e. `i`)] is implicitly made private for the duration of the loop.
+
+    ==== Memory Model
+    ```c
+    int A, B, C // automatically global because outside of pragma
+    #pragma omp parallel for private(A) shared(B) firstprivate(C)
+      for(...)
+    ```
+
+    Each thread has a _private copy of `A`_ and use the _same memory location for `B`_.
+    `C` is also private, but gets its initial value from the global variable. After the loop is
+    over, threads die and both `A` and `B` will be cleared/removed from memory.
+
+    ```c
+    #pragma omp parallel
+      int A = 0 // automatically private because inside of pragma
+    #pragma omp for ...
+    ```
+
+    ==== Avoiding Race conditions: Mutex
+    ```c
+    int sum = 0;
+    #pragma omp parallel for
+      for (int i = 0; i < n; i++)
+    #pragma omp critical { sum += i; } // only one thread at a time
+    ```
+
+    This is _extremely slow_ due to serialization, slower than single threading. Critical section
+    is _overkill_ for this code, with a heavy weight mutex the performance overhead is large.
+
+    ==== Lightweight mutex: Atomic
+    ```c
+    int sum = 0; int i;
+    #pragma omp parallel for
+      for (i = 0; i < n; i++)
+      #pragma omp atomic { sum += i }
+    ```
+
+    ==== Reduction across threads
+    When using `reduction(operator: variable)`, a _copy_ of the reduction variable per thread is created,
+    initialized to the identity of the reduction operator #hinweis[($+ = 0$, $* = 1$)].
+    Each thread will then _reduce_ into its local variable. At the end of the `parallel` region, the local
+    results are _combined into the global variable_. Only associative operators allowed
+    #hinweis[($+, *$ not $-, div$)].
+
+    ```c
+    // Code using the reduction clause
+    int sum = 0;
+    #pragma omp parallel for reduction(+: sum)
+      for (int i = 0; i < n; i++) { sum += i; }
+
+    // The same code without the reduction clause
+    int sum = 0;
+    #pragma omp parallel {
+      int intermediate_sum = 0; // private
+      #pragma omp for
+        for (int i = 0; i < n; i++) { intermediate_sum += i; } // thread partial sum
+      #pragma omp atomic // reduction is protected with atomic
+        final_sum += intermediate_sum; }
+    ```
+]
+
+
+// Code kombiniert in ein Beispiel
+```c
+#include <stdio.h>
+#include <omp.h>
+int main(int argc, char* argv[]) {
+
+    const int np = omp_get_max_threads(); // executed by initial thread
+    printf("OpenMP with threads %d\n", np); // executed by initial thread
+    #pragma omp parallel // pragma spawns multiple threads (fork)
+    {
+        const int np = omp_get_num_threads(); // executed in parallel < v
+        printf("Hello from thread %d\n", omp_get_thread_num());
+    } // thread order not fixed. after execution, threads synchronize & terminate
+
+    // for loop, iteration variable i is implicitly private during loop
+    #pragma omp parallel for
+        for (i=0; i<n; i++) { ... }
+
+    // memory model:
+    int A, B, C // automatically global because outside of pragma
+    #pragma omp parallel for private(A) shared(B) firstprivate(C)
+        for(...)
+        // private copy of A per thread,
+        // C is private but gets initial value from global C.
+        // after loop is over, threads die + A and B cleared/removed from memory
+
+    int A; // setting A private:
+    #pragma omp parallel for private (A)
+        for (...) // is equal to:
+    #pragma omp parallel
+        int A = 0 // automatically private because inside of pragma
+    #pragma omp for ...
+        for (...)
+
+    // Mutex (avoid Race conditions)
+    // performance overhead, single threading is faster than this:
+    int sum = 0;
+    #pragma omp parallel for
+        for (int i = 0; i < n; i++)
+    #pragma omp critical { sum += i; } // only one thread at a time
+
+    // Lightweight Mutex (Atomic)
+    int sum = 0; int i;
+    #pragma omp parallel for
+        for (i = 0; i < n; i++)
+        #pragma omp atomic { sum += i }
+}
+```
+// return 0; // weggelassen
+
+/ For Loop: OpenMP handles oversubscription (too many threads).
+/ Reduction across threads:
+    When using `reduction(operator: variable)`, a _copy_ of the reduction variable per thread is created,
+    initialized to the identity of the reduction operator #hinweis[($+ = 0$, $* = 1$)].
+    Each thread will then _reduce_ into its local variable. At the end of the `parallel` region, the local
+    results are _combined into the global variable_. Only associative operators allowed
+    #hinweis[($+, *$ not $-, div$)].
+```c
+// Code using the reduction clause
+int sum = 0;
+#pragma omp parallel for reduction(+: sum)
+    for (int i = 0; i < n; i++) { sum += i; }
+
+// The same code without the reduction clause
+int sum = 0;
+#pragma omp parallel {
+  int intermediate_sum = 0; // private
+  #pragma omp for
+    for (int i = 0; i < n; i++) { intermediate_sum += i; } // thread partial sum
+  #pragma omp atomic // reduction is protected with atomic
+    final_sum += intermediate_sum; }
+```
+
+==== Hybrid: OpenMP + MPI
+```c
+int numprocs, rank; int iam = 0, np = 1;
+MPI_Init(&argc, &argv);
+MPI_Comm_size(MPI_COMM_WORLD, &numprocs); MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+#pragma omp parallel default(shared) private(iam, np) {
+  np = omp_get_num_threads(); iam = omp_get_thread_num();
+  printf("I am T %d out of %d from P %d out of %d\n", iam, np, rank, numprocs);
+} MPI_Finalize();
+```
+
+==== Sequential `count_hits` to approximate $pi$ with Monte Carlo Simulation in OpenMP
+```c
+long count_hits(long trials) {
+  long hits = 0; long i; double x,y;
+  #pragma omp parallel {
+    #pragma omp for reduction(+:hits) private(x,y)
+      for (i = 0; i < trials; i++) {
+        double x = random_double(); double y = random_double();
+        if (x * x + y * y <= 1) { hits +; }
+    } /* for */ } /* parallel */
+  return hits;
+}
+```
+
+= Performance Scaling
+/ Difficulties with parallel programs:
+    Finding parallelism, granularity of a parallel task, moving data is expensive, load balancing,
+    coordination & synchronization, performance debugging.\
+/ Scalability:
+    The ability of hard- and software to deliver _greater computational power_ when the number of
+    _resources is increased_.\
+/ Scalability Testing:
+    Measuring the ability of an application to perform well or better with
+    varying problem sizes and numbers of processors (strong scaling/weak scaling). Does _not_ test the applications _general
+    functionality_ or correctness.\
+    Primary challenge of parallel computing is _deciding how best to break up a problem_ into
+    individual pieces that can be computed separately.
+    It is _impractical_ to develop and test large applications using the _full problem size_.
+    The problem and number of processors are _scaled down_ at first.
+
+== Strong scaling (CPU bound applications)
+_The number of processors is increased while the problem size remains constant_.
+Results in a reduced workload per processor. Mostly used for long running CPU bound applications.\
+/ Amdahls Law:
+    The speedup is _limited by the fraction of the serial part_ of the software that is not
+    amenable to parallelization. Sweet spot needs to be found. It is reasonable to use _small
+    amounts of resources for small problems_ and _larger quantities of resources for big problems._\
+    $T =$ total time, $p =$ part of the program that can be parallelized., $N =$ amount of processors\
+    $T = (1-p)T + T_p = T_s + T_p$\
+    $T_N = T_p \/ N + (1-p)T$, Speedup $<= 1\/(s + p \/ N)$, Efficiency = $T\/(N dot T_N)$\
+    Amdahls law _ignores the parallel overhead_. Because of that, it is _the upper limit_ of
+    speedup for a problem of fixed size. This seems to be a _bottleneck_ for parallel computing.\
+==== Examples:
+$90%$ of the computation can run parallel, max speedup with $8$ processors?\
+$1 \/ (0.1 + 0.9\/8) approx underline(4.7)$ \
+
+25% of the computation must be serial. Max speedup with $infinity$ Processors? \
+$1\/ (0.25 + 0.75\/infinity) approx 1 \/0.25 = 4$ \
+
+To gain a $500 times$ speedup on $1000$ processors, Amdahls law requires that the proportion of serial part cannot exceed what?\
+$500 = 1\/(s + (1-s) / 1000) => s + (1-s) / 1000 = 1 / 500 \
+=> 1000s + (1-s) = 2 => 999s = 1 => s = 1 / 999 approx underline(0.1%)$
+
+== Weak scaling (Memory bound applications)
+_The number of processors and the problem size is increased_. Mostly used for large memory-bound applications where the required memory cannot be satisfied by a single node.\
+/ Gustafson's law:
+    Based on the approximations that the _parallel part scales linearly_ with the amount of
+    resources, and that the _serial part_ does _not increase_ with respect to the size of the problem.
+    _Speedup_ $= s + p dot N = s + (1-s) dot N$\
+    In this case, the problem size assigned to each processing element stays _constant_ and
+    _additional elements_ are used to solve a _larger total problem_. Therefore, this type of
+    measurement is justification for programs that take a lot of memory or other system resources.\
+==== Example:
+$64$ Processors. $5%$ of the program is serial, Scaled weak speedup?\
+$0.05 + 0.95 dot 64 = underline(60.85)$
+
+= CLI Commands
+#{
+    // color comment for shell:
+    let color_comment = rgb("#008209")
+    show raw.line: it => {
+        let t = it.text
+        if t.starts-with("#") {
+            text(fill: color_comment)[#t]
+        } else {
+            it
+        }
+    }
+    ```bash
+    mpicc -o hello hello.c
+    sbatch script.sub
+    # with slurm for workload distribution, result as slurm file
+    #!/usr/bin/env bash
+    #SBATCH --job-name=compare
+    #SBATCH --time=01:00:00
+    #SBATCH --ntasks=60
+    #SBATCH --nodes=3
+    #SBATCH --partition=nodes
+    module purge
+    module load gcc-toolchain openmpi # -n = number of processes
+    mpiexec -n $SLURM_NTASKS --mca btl self,vader ./hello
+    ```
+}
+/ Compilation & Execution: ```sh mpicc HelloCluster.c && mpiexec -c 24 a.out && sbatch -hi.sub```
